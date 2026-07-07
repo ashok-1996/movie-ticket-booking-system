@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: movie-booking
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/moviebooking}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  jwt:
+    # Base64-encoded 256-bit secret. Override in production via APP_JWT_SECRET.
+    secret: ${APP_JWT_SECRET:c2VjdXJlLW1vdmllLWJvb2tpbmctand0LXNlY3JldC1rZXktMzJieXRlcyE=}
+    expiration-minutes: ${APP_JWT_EXP_MINUTES:120}
+
+booking:
+  hold:
+    ttl-seconds: ${BOOKING_HOLD_TTL_SECONDS:120}
+    sweep-interval-ms: ${BOOKING_HOLD_SWEEP_MS:5000}
+
+pricing:
+  weekend-multiplier: ${PRICING_WEEKEND_MULTIPLIER:1.25}
+
+demo:
+  seed: ${DEMO_SEED:true}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.ashok.moviebooking: INFO

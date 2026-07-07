@@ -1,0 +1,17 @@
+# Convenience only: spins up the PostgreSQL the app connects to for local runs.
+# (Deployment/containerization of the app itself is out of scope.)
+services:
+  postgres:
+    image: postgres:16
+    container_name: moviebooking-postgres
+    environment:
+      POSTGRES_DB: moviebooking
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - moviebooking_pgdata:/var/lib/postgresql/data
+
+volumes:
+  moviebooking_pgdata:

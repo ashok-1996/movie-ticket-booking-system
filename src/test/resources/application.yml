@@ -1,0 +1,32 @@
+spring:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+app:
+  jwt:
+    secret: c2VjdXJlLW1vdmllLWJvb2tpbmctand0LXNlY3JldC1rZXktMzJieXRlcyE=
+    expiration-minutes: 120
+
+booking:
+  hold:
+    ttl-seconds: 120
+    sweep-interval-ms: 1000
+
+pricing:
+  weekend-multiplier: 1.25
+  zone: UTC
+
+demo:
+  seed: false
+
+logging:
+  level:
+    com.ashok.moviebooking: INFO
