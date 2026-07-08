@@ -198,7 +198,7 @@ Integration tests use Zonky embedded PostgreSQL (real Postgres 16, no Docker).
 
 Two PDFs under [`docs/`](docs) accompany the code (both are regenerable from their Python sources):
 
-**Presentation deck** — [`docs/Movie-Booking-Presentation.pdf`](docs/Movie-Booking-Presentation.pdf) (source: `docs/generate_presentation_pdf.py`). A 7-slide walkthrough:
+**Presentation deck** — [`docs/details-docs/Movie-Booking-Presentation.pdf`](docs/details-docs/Movie-Booking-Presentation.pdf) . A 7-slide walkthrough:
 
 1. **Functional Requirements** — the core journey, pricing/money rules, correctness & scale, roles.
 2. **High-Level Design** — Excalidraw-style sketch of the `controller -> service -> repository -> PostgreSQL` flow with the concurrency safeguards and cross-cutting concerns.
@@ -208,12 +208,7 @@ Two PDFs under [`docs/`](docs) accompany the code (both are regenerable from the
 6. **Testing Approach** — the test pyramid, anchored by the 20-thread race test on real PostgreSQL.
 7. **AI Workflow** — how an AI agent was directed, verified, and kept human-owned on decisions.
 
-**Test-case catalog** — [`docs/Movie-Booking-Test-Cases.pdf`](docs/Movie-Booking-Test-Cases.pdf) (source: `docs/generate_test_cases_pdf.py`): smoke → auth → RBAC → validation → catalog → pricing/discount/refund → shows/browsing → booking lifecycle → hold expiry → concurrency → end-to-end, each with manual-testing steps, plus a traceability matrix to the automated tests.
+**Test-case catalog** — [`docs/details-docs/Movie-Booking-Test-Cases.pdf`](docs/details-docs/Movie-Booking-Test-Cases.pdf): smoke → auth → RBAC → validation → catalog → pricing/discount/refund → shows/browsing → booking lifecycle → hold expiry → concurrency → end-to-end, each with manual-testing steps, plus a traceability matrix to the automated tests.
 
-Regenerate either PDF with:
-```bash
-python docs/generate_presentation_pdf.py
-python docs/generate_test_cases_pdf.py
-```
 
 ---

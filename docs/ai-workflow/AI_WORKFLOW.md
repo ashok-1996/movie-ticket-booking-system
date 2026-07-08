@@ -9,8 +9,8 @@ This project was built with an AI coding agent (Cursor). This document describes
 4. **Verification loop.** Compiled and ran the test suite iteratively; fixed issues (e.g., the Zonky provider dependency, and a PostgreSQL `:param IS NULL` type-inference issue resolved by switching show search to a JPA Specification).
 
 ## How AI was directed
-- A single, detailed "build prompt" (see [prompts/build-prompt.md](prompts/build-prompt.md)) defined the stack, domain, the mandatory three-layer concurrency defense, the API, and the test priorities.
-- [AGENTS.md](../AGENTS.md) captured durable rules the agent had to respect on every change (layering, concurrency invariants, testing).
+- A single, detailed "build prompt" (see [prompts/build-prompt.md](../prompts/build-prompt.md)) defined the stack, domain, the mandatory three-layer concurrency defense, the API, and the test priorities.
+- [AGENTS.md](../../AGENTS.md) captured durable rules the agent had to respect on every change (layering, concurrency invariants, testing).
 - Tight, testable acceptance criteria (especially the concurrency race test) kept the agent honest — correctness was demonstrated, not asserted.
 
 ## What AI produced vs. verified
