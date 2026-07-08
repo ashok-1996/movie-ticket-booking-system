@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -62,7 +63,37 @@ public class DiscountService {
             throw new ApiException(ErrorCode.INVALID_DISCOUNT,
                     "Order amount below minimum for this discount");
         }
+        return rawDiscount(dc, amount);
+    }
 
+    /**
+     * Lists every active discount that a customer could actually apply to the
+     * given order amount right now (validity window + minimum met), each with
+     * the discount it would produce. Sorted best-saving first so the UI can
+     * surface the most attractive coupon. Read-only; changes nothing.
+     */
+    @Transactional(readOnly = true)
+    public List<Quote> applicableFor(BigDecimal amount, Instant now) {
+        return repository.findByActiveTrue().stream()
+                .filter(dc -> withinWindow(dc, now) && meetsMinimum(dc, amount))
+                .map(dc -> new Quote(dc.getCode(), dc.getType(), dc.getValue(), rawDiscount(dc, amount)))
+                .filter(q -> q.discountAmount().signum() > 0)
+                .sorted(Comparator.comparing(Quote::discountAmount).reversed())
+                .toList();
+    }
+
+    private boolean withinWindow(DiscountCode dc, Instant now) {
+        if (dc.getValidFrom() != null && now.isBefore(dc.getValidFrom())) {
+            return false;
+        }
+        return dc.getValidTo() == null || !now.isAfter(dc.getValidTo());
+    }
+
+    private boolean meetsMinimum(DiscountCode dc, BigDecimal amount) {
+        return dc.getMinAmount() == null || amount.compareTo(dc.getMinAmount()) >= 0;
+    }
+
+    private BigDecimal rawDiscount(DiscountCode dc, BigDecimal amount) {
         BigDecimal discount;
         if (dc.getType() == DiscountType.PERCENT) {
             discount = amount.multiply(dc.getValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
@@ -76,6 +107,9 @@ public class DiscountService {
             discount = amount;
         }
         return discount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public record Quote(String code, DiscountType type, BigDecimal value, BigDecimal discountAmount) {
     }
 
     private void apply(DiscountCode code, DiscountCodeDto.Request req) {

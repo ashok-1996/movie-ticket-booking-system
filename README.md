@@ -13,7 +13,9 @@ The requirement (multi-city theaters, seat-level booking, time-bound holds, pric
 - Seat selection with **time-bound holds** that auto-release on expiry.
 - **Concurrency-safe booking** with a three-layer defense (see §4).
 - Multiple pricing tiers (REGULAR/PREMIUM/RECLINER) + configurable weekend surcharge.
+- **One booking = one pricing tier** — a single hold cannot mix seat classes (e.g. 2 REGULAR + 5 PREMIUM is rejected).
 - Discount codes (percent/flat, caps, min-amount, validity window).
+- **Discount preview** — customers can list the applicable coupons and their computed final price on a held booking *before* confirming payment.
 - Configurable, tiered **refund policy** on cancellation.
 - **Asynchronous, non-blocking** confirmation/reminder notifications (mock adapter).
 - Append-only **audit trail** of state transitions.
@@ -89,20 +91,23 @@ Concurrent attempts to book the same seat are made safe by **three independent l
 
 ### Prerequisites
 - Java 21, Maven 3.9+
-- A PostgreSQL database (use the bundled compose file, or point to your own)
+- PostgreSQL is **optional** — Option A below needs neither Docker nor a local PostgreSQL install.
 
-### Start PostgreSQL (option A: Docker)
+### Option A: Zero-setup run (no Docker, no PostgreSQL install) — recommended
+```bash
+mvn spring-boot:run -Plocal
+```
+The `local` profile boots the same real PostgreSQL 16 binary the tests use (Zonky embedded) in-process, so the app runs with **no Docker daemon and no PostgreSQL installed**. The first run downloads the Postgres binary once (needs internet); afterwards it runs offline. The embedded database is ephemeral, so data resets on each restart — ideal for local testing and demos.
+
+### Option B: Run against a real PostgreSQL (Docker)
 ```bash
 docker compose up -d
-```
-
-### Or point to an existing PostgreSQL (option B)
-Set env vars: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` (defaults: `jdbc:postgresql://localhost:5432/moviebooking`, `postgres`/`postgres`).
-
-### Run the app
-```bash
 mvn spring-boot:run
 ```
+
+### Option C: Point to an existing PostgreSQL
+Set env vars `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` (defaults: `jdbc:postgresql://localhost:5432/moviebooking`, `postgres`/`postgres`), then `mvn spring-boot:run`.
+
 On first start, Flyway applies the schema and reference data, and a demo dataset is seeded (disable with `DEMO_SEED=false`).
 
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
@@ -110,10 +115,11 @@ On first start, Flyway applies the schema and reference data, and a demo dataset
 
 ### Quick demo flow
 1. `POST /auth/login` with the customer account -> copy the `token`.
-2. `GET /shows` -> pick a `showId`; `GET /shows/{showId}/seats` -> pick `showSeatId`s.
+2. `GET /shows` -> pick a `showId`; `GET /shows/{showId}/seats` -> pick `showSeatId`s (all of the same seat class).
 3. `POST /shows/{showId}/holds` (Bearer token) with `{"showSeatIds":[...]}` -> returns a PENDING booking.
-4. `POST /bookings/{bookingId}/confirm` with optional `{"discountCode":"SAVE20","paymentMethod":"CARD"}`.
-5. `POST /bookings/{bookingId}/cancel` -> refund per policy. `GET /bookings/me` for history.
+4. `GET /bookings/{bookingId}/discounts` -> preview applicable coupons and each one's computed final price.
+5. `POST /bookings/{bookingId}/confirm` with optional `{"discountCode":"SAVE20","paymentMethod":"CARD"}`.
+6. `POST /bookings/{bookingId}/cancel` -> refund per policy. `GET /bookings/me` for history.
 
 ---
 
@@ -126,7 +132,8 @@ On first start, Flyway applies the schema and reference data, and a demo dataset
 | GET | `/shows` | public | Browse shows (filters: `cityId`, `movieId`, `from`, `to`) |
 | GET | `/shows/{id}` | public | Show detail |
 | GET | `/shows/{id}/seats` | public | Live seat map |
-| POST | `/shows/{id}/holds` | CUSTOMER | Hold seats (starts TTL) |
+| POST | `/shows/{id}/holds` | CUSTOMER | Hold seats (starts TTL; all seats must be one pricing tier) |
+| GET | `/bookings/{id}/discounts` | CUSTOMER | Preview applicable coupons + computed final price for a held booking |
 | POST | `/bookings/{id}/confirm` | CUSTOMER | Confirm hold (discount + payment) |
 | POST | `/bookings/{id}/cancel` | CUSTOMER | Cancel + refund |
 | GET | `/bookings/me` | CUSTOMER | Booking history |
@@ -152,8 +159,10 @@ mvn test
 | `SeatBookingConcurrencyTest` | **The money test.** 20 threads race for one seat -> exactly 1 confirmed, 19 rejected, seat `BOOKED`, no oversell. Runs on real PostgreSQL. |
 | `HoldExpiryTest` | An expired hold returns the seat to `AVAILABLE` and the booking to `EXPIRED`. |
 | `BookingLifecycleTest` | Hold -> confirm -> cancel (full refund) -> seat freed and re-bookable. |
+| `SinglePricingTierTest` | A hold mixing seat classes is rejected; a single-tier hold succeeds. |
+| `BookingDiscountPreviewTest` | Preview lists only applicable coupons with computed price; rejected once the booking is no longer PENDING. |
 | `RefundPolicyServiceTest` | Refund amount by cancellation window (parameterized). |
-| `DiscountServiceTest` | Percent/flat, max cap, min-amount, validity, cap at order amount. |
+| `DiscountServiceTest` | Percent/flat, max cap, min-amount, validity, cap at order amount, and `applicableFor` preview logic. |
 | `PricingServiceTest` | Tier multipliers and weekend surcharge. |
 | `RbacAndValidationTest` | 401/403 by role, 400 validation, public browse. |
 
@@ -176,10 +185,35 @@ Integration tests use Zonky embedded PostgreSQL (real Postgres 16, no Docker).
 
 ## 9. Key assumptions
 - Two roles only (ADMIN, CUSTOMER). Admins are provisioned via seeding, not self-registration.
+- A single booking is restricted to one pricing tier; multi-tier orders are expected to be placed as separate bookings.
 - Payment is mocked (always succeeds) — real gateways are out of scope.
 - Notification delivery is mocked with logging.
 - Weekend pricing is derived from the show start time in `pricing.zone` (default UTC).
 - `booking_seat` rows are retained for history; the partial unique index enforces uniqueness only over active allocations.
 - A freed seat becomes bookable after the next expiry sweep (bounded by the sweep interval).
 
-See [AGENTS.md](AGENTS.md) and [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md) for the AI-assisted development workflow, and [docs/prompts](docs/prompts) for the raw prompts used.
+---
+
+## 10. Design walkthrough & deliverables
+
+Two PDFs under [`docs/`](docs) accompany the code (both are regenerable from their Python sources):
+
+**Presentation deck** — [`docs/Movie-Booking-Presentation.pdf`](docs/Movie-Booking-Presentation.pdf) (source: `docs/generate_presentation_pdf.py`). A 7-slide walkthrough:
+
+1. **Functional Requirements** — the core journey, pricing/money rules, correctness & scale, roles.
+2. **High-Level Design** — Excalidraw-style sketch of the `controller -> service -> repository -> PostgreSQL` flow with the concurrency safeguards and cross-cutting concerns.
+3. **Concurrency: Approach & Trade-offs** — PostgreSQL row locks vs. synchronous / async / event-specific / non-overlapping queues, compared on latency and engineering effort, with the verdict for row-level locking.
+4. **ER Diagram** — SmartDraw-style physical model: entity tables with PK/FK attributes and crow's-foot cardinality.
+5. **Tech Stack & Reasoning** — each choice tied to correctness, low latency, and simple engineering.
+6. **Testing Approach** — the test pyramid, anchored by the 20-thread race test on real PostgreSQL.
+7. **AI Workflow** — how an AI agent was directed, verified, and kept human-owned on decisions.
+
+**Test-case catalog** — [`docs/Movie-Booking-Test-Cases.pdf`](docs/Movie-Booking-Test-Cases.pdf) (source: `docs/generate_test_cases_pdf.py`): smoke → auth → RBAC → validation → catalog → pricing/discount/refund → shows/browsing → booking lifecycle → hold expiry → concurrency → end-to-end, each with manual-testing steps, plus a traceability matrix to the automated tests.
+
+Regenerate either PDF with:
+```bash
+python docs/generate_presentation_pdf.py
+python docs/generate_test_cases_pdf.py
+```
+
+---

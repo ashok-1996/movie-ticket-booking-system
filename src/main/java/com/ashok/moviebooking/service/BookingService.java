@@ -5,6 +5,7 @@ import com.ashok.moviebooking.common.ErrorCode;
 import com.ashok.moviebooking.domain.*;
 import com.ashok.moviebooking.dto.booking.BookingResponse;
 import com.ashok.moviebooking.dto.booking.ConfirmRequest;
+import com.ashok.moviebooking.dto.booking.DiscountOptionsResponse;
 import com.ashok.moviebooking.notification.BookingEvent;
 import com.ashok.moviebooking.repository.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,6 +61,12 @@ public class BookingService {
 
         if (seats.size() != ids.size()) {
             throw ApiException.notFound("One or more seats");
+        }
+        // Requirement: a single booking must not mix pricing tiers (seat classes),
+        // e.g. 2 REGULAR + 5 PREMIUM is rejected.
+        if (seats.stream().map(ss -> ss.getSeat().getSeatClass()).distinct().count() > 1) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR,
+                    "All seats in one booking must belong to the same pricing tier (seat class)");
         }
         Instant now = Instant.now();
         Instant expiresAt = now.plusSeconds(holdTtlSeconds);
@@ -180,6 +187,25 @@ public class BookingService {
         auditService.record("Booking", booking.getId(), "CANCELLED", "refund=" + refund, userId);
         eventPublisher.publishEvent(new BookingEvent(booking.getId(), userId, BookingEvent.Type.CANCELLED));
         return toResponse(booking);
+    }
+
+    /**
+     * Preview step: returns the coupons the owner could apply to this pending
+     * booking (based on its seat prices / total), each with the resulting price.
+     * Purely informational - the customer still chooses whether to confirm.
+     */
+    @Transactional(readOnly = true)
+    public DiscountOptionsResponse availableDiscounts(Long bookingId, Long userId) {
+        Booking booking = loadOwnedBooking(bookingId, userId);
+        if (booking.getStatus() != BookingStatus.PENDING) {
+            throw new ApiException(ErrorCode.CONFLICT, "Discounts can only be previewed for a pending booking");
+        }
+        BigDecimal amount = booking.getTotalAmount();
+        List<DiscountOptionsResponse.Option> options = discountService.applicableFor(amount, Instant.now()).stream()
+                .map(q -> new DiscountOptionsResponse.Option(
+                        q.code(), q.type(), q.value(), q.discountAmount(), amount.subtract(q.discountAmount())))
+                .toList();
+        return new DiscountOptionsResponse(booking.getId(), amount, options);
     }
 
     @Transactional(readOnly = true)

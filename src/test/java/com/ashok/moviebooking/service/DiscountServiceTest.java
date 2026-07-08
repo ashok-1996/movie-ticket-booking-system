@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -95,6 +96,39 @@ class DiscountServiceTest {
         when(repository.findByCodeIgnoreCase("NOPE")).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.computeDiscount("NOPE", new BigDecimal("500"), Instant.now()))
                 .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void applicableForReturnsEligibleCouponsSortedByBestSaving() {
+        DiscountCode percentTen = percent("TEN", "10", null, null);      // 10% of 500 = 50
+        DiscountCode flatHundred = new DiscountCode();
+        flatHundred.setCode("FLAT100");
+        flatHundred.setType(DiscountType.FLAT);
+        flatHundred.setValue(new BigDecimal("100"));
+        flatHundred.setActive(true);
+        when(repository.findByActiveTrue()).thenReturn(List.of(percentTen, flatHundred));
+
+        List<DiscountService.Quote> quotes = service.applicableFor(new BigDecimal("500"), Instant.now());
+
+        assertThat(quotes).extracting(DiscountService.Quote::code).containsExactly("FLAT100", "TEN");
+        assertThat(quotes.get(0).discountAmount()).isEqualByComparingTo("100.00");
+        assertThat(quotes.get(1).discountAmount()).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    void applicableForExcludesCouponsBelowMinimumAmount() {
+        when(repository.findByActiveTrue()).thenReturn(List.of(percent("MIN", "10", null, new BigDecimal("1000"))));
+
+        assertThat(service.applicableFor(new BigDecimal("500"), Instant.now())).isEmpty();
+    }
+
+    @Test
+    void applicableForExcludesExpiredCoupons() {
+        DiscountCode expired = percent("OLD", "10", null, null);
+        expired.setValidTo(Instant.now().minusSeconds(3600));
+        when(repository.findByActiveTrue()).thenReturn(List.of(expired));
+
+        assertThat(service.applicableFor(new BigDecimal("500"), Instant.now())).isEmpty();
     }
 
     private DiscountCode percent(String code, String value, BigDecimal max, BigDecimal min) {

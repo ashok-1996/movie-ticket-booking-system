@@ -2,6 +2,7 @@ package com.ashok.moviebooking.controller;
 
 import com.ashok.moviebooking.dto.booking.BookingResponse;
 import com.ashok.moviebooking.dto.booking.ConfirmRequest;
+import com.ashok.moviebooking.dto.booking.DiscountOptionsResponse;
 import com.ashok.moviebooking.dto.booking.HoldRequest;
 import com.ashok.moviebooking.security.CurrentUser;
 import com.ashok.moviebooking.service.BookingService;
@@ -28,6 +29,11 @@ public class BookingController {
                                                 @Valid @RequestBody HoldRequest req) {
         BookingResponse response = bookingService.hold(showId, req.showSeatIds(), CurrentUser.id());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/bookings/{bookingId}/discounts")
+    public DiscountOptionsResponse availableDiscounts(@PathVariable Long bookingId) {
+        return bookingService.availableDiscounts(bookingId, CurrentUser.id());
     }
 
     @PostMapping("/bookings/{bookingId}/confirm")

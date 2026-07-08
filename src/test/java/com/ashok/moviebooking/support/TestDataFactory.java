@@ -55,6 +55,24 @@ public class TestDataFactory {
         return showService.createShow(new ShowDto.Request(movie.id(), screen.id(), start, new BigDecimal("100.00")));
     }
 
+    /**
+     * Creates a show with two seat classes: row A REGULAR and row B PREMIUM,
+     * for verifying the single-pricing-tier-per-booking rule.
+     */
+    public ShowDto.Response createShowWithMixedClasses(int regularCount, int premiumCount) {
+        CityDto.Response city = catalogService.createCity(new CityDto.Request("City-" + unique(), "State"));
+        TheaterDto.Response theater = catalogService.createTheater(
+                new TheaterDto.Request("Theater", "Addr", city.id()));
+        ScreenDto.Response screen = catalogService.createScreen(new ScreenDto.Request("Screen", theater.id()));
+        catalogService.createSeatLayout(screen.id(), new SeatDto.LayoutRequest(List.of(
+                new SeatDto.RowSpec("A", regularCount, SeatClass.REGULAR),
+                new SeatDto.RowSpec("B", premiumCount, SeatClass.PREMIUM))));
+        MovieDto.Response movie = catalogService.createMovie(
+                new MovieDto.Request("Movie", "English", "Drama", 120, "UA"));
+        Instant start = Instant.now().plus(10, ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+        return showService.createShow(new ShowDto.Request(movie.id(), screen.id(), start, new BigDecimal("100.00")));
+    }
+
     private String unique() {
         return Long.toString(System.nanoTime());
     }
